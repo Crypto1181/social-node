@@ -19,6 +19,8 @@ app.use(morgan('dev'));
 app.use('/api/auth', authRoutes);
 const owletRoutes = require('./routes/owlet');
 app.use('/api/owlet', owletRoutes);
+const walletRoutes = require('./routes/walletRoutes');
+app.use('/api/wallet', walletRoutes);
 
 
 app.get('/', (req, res) => {
