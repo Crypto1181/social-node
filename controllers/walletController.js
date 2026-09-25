@@ -1,15 +1,20 @@
 const axios = require('axios');
 const User = require('../models/User');
+const Transaction = require('../models/Transaction');
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 
 exports.initializeDeposit = async (req, res) => {
   try {
     const { amount } = req.body;
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.userId);
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ success: false, message: 'Invalid amount' });
+    }
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
     const response = await axios.post(
@@ -46,15 +51,15 @@ exports.initializeDeposit = async (req, res) => {
 exports.verifyDeposit = async (req, res) => {
   try {
     const { reference } = req.body;
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.userId);
 
     if (!reference) {
       return res.status(400).json({ success: false, message: 'Reference is required' });
     }
 
     // Check if reference already processed (to prevent double crediting)
-    // We could store it in a Transaction model. For now we will check the user's transactions array.
-    if (user.transactions && user.transactions.some(t => t.reference === reference)) {
+    const existingTransaction = await Transaction.findOne({ reference });
+    if (existingTransaction) {
       return res.status(400).json({ success: false, message: 'Transaction already processed' });
     }
 
@@ -75,16 +80,14 @@ exports.verifyDeposit = async (req, res) => {
       user.walletBalance = (user.walletBalance || 0) + amountNaira;
       
       // Add to transaction history
-      const transaction = {
+      await Transaction.create({
+        user: req.user.userId,
         type: 'deposit',
         amount: amountNaira,
+        description: 'Paystack Deposit',
         reference: reference,
-        date: new Date(),
         status: 'success'
-      };
-      
-      if (!user.transactions) user.transactions = [];
-      user.transactions.push(transaction);
+      });
 
       await user.save();
 

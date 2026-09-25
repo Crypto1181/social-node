@@ -20,7 +20,19 @@ const UserSchema = new mongoose.Schema({
   walletBalance: {
     type: Number,
     default: 0
-  }
+  },
+  profilePic: {
+    type: String,
+    default: ''
+  },
+  transactions: [{
+    type: { type: String }, // 'deposit', 'order'
+    amount: Number,
+    reference: String,
+    date: Date,
+    status: String,
+    details: mongoose.Schema.Types.Mixed
+  }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);
