@@ -104,3 +104,14 @@ exports.verifyDeposit = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to verify deposit' });
   }
 };
+
+exports.paystackCallback = (req, res) => {
+  res.send(`
+    <html>
+      <body style="display:flex; justify-content:center; align-items:center; height:100vh; flex-direction:column; font-family:sans-serif; text-align:center;">
+        <h1 style="color:green;">Payment Successful!</h1>
+        <p>You can now close this window and go back to the app to verify your deposit.</p>
+      </body>
+    </html>
+  `);
+};
