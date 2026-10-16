@@ -336,40 +336,31 @@ exports.createCard = async (req, res) => {
 // --- Talktiyu (Phone Numbers & OTP) ---
 exports.getNumberCountries = async (req, res) => {
   try {
-    const { actionType } = req.body;
-    let apiAction = 'number_countries';
-    if (actionType === 'rent_number') {
-      apiAction = 'rent_countries';
-    }
-
     const response = await axios.post(OWLET_API_URL, {
       key: OWLET_API_KEY,
-      action: apiAction
+      action: 'number_countries'
     });
     res.status(200).json({ success: true, data: response.data });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to fetch number countries' });
+    console.error('getNumberCountries error:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: error.response?.data?.error || 'Failed to fetch number countries' });
   }
 };
 
 exports.getNumberServices = async (req, res) => {
   try {
-    const { country, actionType } = req.body;
-    let apiAction = 'number_services';
-    if (actionType === 'rent_number') {
-      apiAction = 'rent_services';
-    }
-
+    const { country } = req.body;
     const payload = {
       key: OWLET_API_KEY,
-      action: apiAction
+      action: 'number_services'
     };
     if (country) payload.country = country;
 
     const response = await axios.post(OWLET_API_URL, payload);
     res.status(200).json({ success: true, data: response.data });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to fetch number services' });
+    console.error('getNumberServices error:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: error.response?.data?.error || 'Failed to fetch number services' });
   }
 };
 
@@ -385,7 +376,7 @@ exports.rentNumber = async (req, res) => {
 
     const response = await axios.post(OWLET_API_URL, {
       key: OWLET_API_KEY,
-      action: actionType || 'rent_number', // supports buy_number or rent_number
+      action: 'rent_number',
       country,
       service
     });
@@ -400,13 +391,14 @@ exports.rentNumber = async (req, res) => {
       user: userId,
       type: 'purchase',
       amount: totalCost,
-      description: `Got Number for ${service} (Action: ${actionType || 'rent_number'})`,
+      description: `Rented Number for ${service} (Country: ${country})`,
       reference: data.order ? data.order.toString() : ''
     });
 
     res.status(200).json({ success: true, data, newBalance: user.walletBalance });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to get number' });
+    console.error('rentNumber error:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: error.response?.data?.error || 'Failed to get number' });
   }
 };
 
