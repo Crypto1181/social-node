@@ -439,3 +439,84 @@ exports.withdraw = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to process withdrawal request' });
   }
 };
+
+let cachedBanks = null;
+let lastBanksFetchTime = 0;
+
+exports.getBanks = async (req, res) => {
+  try {
+    const now = Date.now();
+    // Cache for 1 hour
+    if (cachedBanks && (now - lastBanksFetchTime < 3600000)) {
+      return res.json({ success: true, banks: cachedBanks });
+    }
+
+    const response = await axios.get('https://api.paystack.co/bank?country=nigeria', {
+      headers: {
+        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`
+      }
+    });
+
+    if (response.data && response.data.data) {
+      const banks = response.data.data
+        .filter(b => b.active)
+        .map(b => ({
+          name: b.name,
+          code: b.code,
+          slug: b.slug
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      cachedBanks = banks;
+      lastBanksFetchTime = now;
+      return res.json({ success: true, banks });
+    }
+
+    return res.status(400).json({ success: false, message: 'Could not fetch banks' });
+  } catch (error) {
+    console.error('Get Banks Error:', error.response?.data || error.message);
+    if (cachedBanks) {
+      return res.json({ success: true, banks: cachedBanks });
+    }
+    return res.status(500).json({ success: false, message: 'Failed to retrieve banks' });
+  }
+};
+
+exports.resolveAccount = async (req, res) => {
+  try {
+    const { account_number, bank_code } = req.query;
+
+    if (!account_number || account_number.length !== 10) {
+      return res.status(400).json({ success: false, message: '10-digit account number required' });
+    }
+
+    if (!bank_code) {
+      return res.status(400).json({ success: false, message: 'Bank code required' });
+    }
+
+    const response = await axios.get(
+      `https://api.paystack.co/bank/resolve?account_number=${account_number}&bank_code=${bank_code}`,
+      {
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`
+        }
+      }
+    );
+
+    if (response.data && response.data.status && response.data.data) {
+      return res.json({
+        success: true,
+        accountName: response.data.data.account_name,
+        accountNumber: response.data.data.account_number
+      });
+    }
+
+    return res.status(400).json({ success: false, message: 'Account not found' });
+  } catch (error) {
+    console.error('Resolve Account Error:', error.response?.data || error.message);
+    return res.status(400).json({
+      success: false,
+      message: error.response?.data?.message || 'Could not verify account number'
+    });
+  }
+};

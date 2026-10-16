@@ -7,6 +7,8 @@ router.post('/deposit', protect, walletController.initializeDeposit);
 router.post('/verify', protect, walletController.verifyDeposit);
 router.get('/callback', walletController.paystackCallback);
 router.post('/withdraw', protect, walletController.withdraw);
+router.get('/banks', walletController.getBanks);
+router.get('/resolve-account', protect, walletController.resolveAccount);
 router.post('/webhook/bachs', walletController.bachsWebhook);
 
 module.exports = router;
