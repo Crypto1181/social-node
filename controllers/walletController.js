@@ -325,3 +325,117 @@ exports.paystackCallback = (req, res) => {
     </html>
   `);
 };
+
+exports.withdraw = async (req, res) => {
+  try {
+    const { 
+      amount, 
+      destinationType = 'bank', 
+      bankCode, 
+      bankName, 
+      accountNumber, 
+      accountName, 
+      cryptoNetwork, 
+      walletAddress 
+    } = req.body;
+
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const numAmount = parseFloat(amount);
+    if (!numAmount || isNaN(numAmount) || numAmount < 500) {
+      return res.status(400).json({ success: false, message: 'Minimum withdrawal amount is ₦500' });
+    }
+
+    if ((user.walletBalance || 0) < numAmount) {
+      return res.status(400).json({ success: false, message: 'Insufficient wallet balance' });
+    }
+
+    if (destinationType === 'bank') {
+      if (!accountNumber || accountNumber.length < 10) {
+        return res.status(400).json({ success: false, message: 'Valid 10-digit account number is required' });
+      }
+      if (!bankName && !bankCode) {
+        return res.status(400).json({ success: false, message: 'Bank selection is required' });
+      }
+    } else if (destinationType === 'crypto') {
+      if (!walletAddress || walletAddress.trim().length < 10) {
+        return res.status(400).json({ success: false, message: 'Valid crypto wallet address is required' });
+      }
+    }
+
+    // Deduct user balance
+    user.walletBalance = user.walletBalance - numAmount;
+    await user.save();
+
+    const reference = `WD_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const destinationDesc = destinationType === 'crypto' 
+      ? `Crypto (${cryptoNetwork || 'USDT'}): ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
+      : `${bankName || 'Bank'} (${accountNumber}) - ${accountName || user.name}`;
+
+    // Create Transaction record
+    await Transaction.create({
+      user: user._id,
+      type: 'withdraw',
+      amount: numAmount,
+      description: `Withdrawal: ${destinationDesc}`,
+      reference: reference,
+      status: 'pending'
+    });
+
+    // Attempt payout via Bachs if configured
+    if (BACHS_SECRET_KEY) {
+      try {
+        if (destinationType === 'bank' && bankCode && accountNumber) {
+          const destRes = await axios.post(
+            'https://api.bachs.io/v1/payouts/destinations',
+            {
+              type: 'bank_account',
+              currency: 'NGN',
+              bank_code: bankCode,
+              account_number: accountNumber,
+              name: accountName || user.name
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${BACHS_SECRET_KEY}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          if (destRes.data && destRes.data.destination_id) {
+            await axios.post(
+              'https://api.bachs.io/v1/payouts',
+              {
+                destination: destRes.data.destination_id,
+                amount: numAmount.toFixed(2),
+                reference: reference
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${BACHS_SECRET_KEY}`,
+                  'Content-Type': 'application/json'
+                }
+              }
+            );
+          }
+        }
+      } catch (payoutErr) {
+        console.warn('Bachs automatic payout status:', payoutErr.response?.data || payoutErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Withdrawal request submitted successfully',
+      reference: reference,
+      newBalance: user.walletBalance
+    });
+  } catch (error) {
+    console.error('Withdraw Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to process withdrawal request' });
+  }
+};
