@@ -6,5 +6,6 @@ const walletController = require('../controllers/walletController');
 router.post('/deposit', protect, walletController.initializeDeposit);
 router.post('/verify', protect, walletController.verifyDeposit);
 router.get('/callback', walletController.paystackCallback);
+router.post('/webhook/bachs', walletController.bachsWebhook);
 
 module.exports = router;
