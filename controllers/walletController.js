@@ -345,8 +345,8 @@ exports.withdraw = async (req, res) => {
     }
 
     const numAmount = parseFloat(amount);
-    if (!numAmount || isNaN(numAmount) || numAmount < 500) {
-      return res.status(400).json({ success: false, message: 'Minimum withdrawal amount is ₦500' });
+    if (!numAmount || isNaN(numAmount) || numAmount < 50) {
+      return res.status(400).json({ success: false, message: 'Minimum withdrawal amount is ₦50' });
     }
 
     if ((user.walletBalance || 0) < numAmount) {
