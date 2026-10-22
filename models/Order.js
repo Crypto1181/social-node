@@ -33,6 +33,14 @@ const orderSchema = new mongoose.Schema({
   status: {
     type: String,
     default: 'Pending'
+  },
+  startCount: {
+    type: String,
+    default: '0'
+  },
+  remains: {
+    type: String,
+    default: '0'
   }
 }, { timestamps: true });
 

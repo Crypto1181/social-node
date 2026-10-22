@@ -135,9 +135,10 @@ exports.getOrders = async (req, res) => {
         let savePromises = [];
         for (let order of orders) {
           const liveData = liveStatuses[order.owletOrderId];
-          if (liveData && !liveData.error && liveData.status) {
-            order.status = liveData.status;
-            // Save updated status to DB
+          if (liveData && !liveData.error) {
+            if (liveData.status) order.status = liveData.status;
+            if (liveData.start_count !== undefined) order.startCount = String(liveData.start_count);
+            if (liveData.remains !== undefined) order.remains = String(liveData.remains);
             savePromises.push(order.save());
           }
         }
@@ -145,7 +146,12 @@ exports.getOrders = async (req, res) => {
       }
     }
     
-    res.status(200).json({ success: true, orders });
+    const enrichedOrders = orders.map(order => {
+      const obj = order.toObject ? order.toObject() : { ...order };
+      return obj;
+    });
+
+    res.status(200).json({ success: true, orders: enrichedOrders });
   } catch (error) {
     console.error('getOrders error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to fetch orders' });
