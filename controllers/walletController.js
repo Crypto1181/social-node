@@ -385,16 +385,30 @@ exports.withdraw = async (req, res) => {
       status: 'pending'
     });
 
+// Map Paystack bank codes to Bachs bank codes for payouts
+const PAYSTACK_TO_BACHS_CODE = {
+  '999992': '305',    // OPay (Paycom)
+  '999991': '100033', // PalmPay
+  '50515': '090405',  // Moniepoint MFB
+  '120001': '120001', // 9PSB
+  '120002': '120002', // Hope PSB
+  '120003': '120003', // MoMo PSB
+  '120004': '120004', // SmartCash PSB
+  '50211': '50211',   // Kuda Bank
+  '090267': '50211',  // Kuda MFB
+};
+
     // Attempt payout via Bachs if configured
     if (BACHS_SECRET_KEY) {
       try {
         if (destinationType === 'bank' && bankCode && accountNumber) {
+          const bachsBankCode = PAYSTACK_TO_BACHS_CODE[bankCode] || bankCode;
           const destRes = await axios.post(
             'https://api.bachs.io/v1/payouts/destinations',
             {
               type: 'bank_account',
               currency: 'NGN',
-              bank_code: bankCode,
+              bank_code: bachsBankCode,
               account_number: accountNumber,
               name: accountName || user.name
             },
@@ -406,25 +420,42 @@ exports.withdraw = async (req, res) => {
             }
           );
 
-          if (destRes.data && destRes.data.destination_id) {
+          const destinationId = destRes.data?.id || destRes.data?.destination_id;
+          if (destinationId) {
             await axios.post(
               'https://api.bachs.io/v1/payouts',
               {
-                destination: destRes.data.destination_id,
-                amount: numAmount.toFixed(2),
-                reference: reference
+                destination: destinationId,
+                amount: numAmount.toFixed(2)
               },
               {
                 headers: {
                   Authorization: `Bearer ${BACHS_SECRET_KEY}`,
-                  'Content-Type': 'application/json'
+                  'Content-Type': 'application/json',
+                  'Idempotency-Key': reference
                 }
               }
             );
           }
         }
       } catch (payoutErr) {
-        console.warn('Bachs automatic payout status:', payoutErr.response?.data || payoutErr.message);
+        const errData = payoutErr.response?.data;
+        const errorDetail = errData?.detail || errData?.message || payoutErr.message;
+        console.warn('Bachs automatic payout status:', errData || payoutErr.message);
+
+        // If the bank or account itself was rejected as not payable, refund balance immediately
+        if (errData?.error_code === 'BANK_NOT_PAYABLE' || errData?.error_code === 'BANK_ACCOUNT_NOT_VERIFIED') {
+          user.walletBalance = user.walletBalance + numAmount;
+          await user.save();
+          await Transaction.findOneAndUpdate(
+            { reference },
+            { status: 'failed', description: `Withdrawal Failed: ${errorDetail}` }
+          );
+          return res.status(400).json({
+            success: false,
+            message: errorDetail || 'Selected bank account is currently not payable.'
+          });
+        }
       }
     }
 
